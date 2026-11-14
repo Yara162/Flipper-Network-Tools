@@ -82,8 +82,10 @@ lacks. Delete the file to forget them. The devboard itself never stores a passwo
 
 | Item | Status |
 |---|---|
-| Devboard firmware | Compiles; not yet run on hardware |
-| Flipper app | Compiles for firmware 1.5.1; not yet run on hardware |
+| Wi-Fi survey | Working on real hardware |
+| Signal walk test | Working on real hardware |
+| Join-the-network check | Not yet confirmed on hardware |
+| Discovery check | Not yet confirmed on hardware |
 
 ## Going back
 
