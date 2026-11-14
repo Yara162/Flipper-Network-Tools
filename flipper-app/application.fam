@@ -1,0 +1,11 @@
+App(
+    appid="wifi_tools",
+    name="Wi-Fi Tools",
+    apptype=FlipperAppType.EXTERNAL,
+    entry_point="wifi_tools_app",
+    requires=["gui", "storage"],
+    stack_size=4 * 1024,
+    fap_category="GPIO",
+    fap_version="0.1",
+    fap_description="Wi-Fi survey, signal walk test, join check and service discovery with the Wi-Fi Devboard",
+)
