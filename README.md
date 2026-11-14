@@ -88,14 +88,21 @@ lacks. Delete the file to forget them. The devboard itself never stores a passwo
 
 ## Status
 
+Every feature has been tested on real hardware (Flipper Zero on firmware 1.5.1 with the
+official Wi-Fi Devboard).
+
 | Item | Status |
 |---|---|
-| Wi-Fi survey | Working on real hardware |
+| Wi-Fi survey and channel chart | Working on real hardware |
 | Signal walk test | Working on real hardware |
 | Join-the-network check | Working on real hardware |
 | Discovery check | Working on real hardware |
 | Password file edited on a computer | Working on real hardware |
-| Saved discovery reports | Not yet confirmed on hardware |
+| Saved discovery reports | Working on real hardware |
+
+Discovery was confirmed with AirPlay, Chromecast, HomeKit and SSH services. The test
+network had no Dante or NDI devices, so those two service types have not been seen in
+practice.
 
 ## Going back
 
