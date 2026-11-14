@@ -20,7 +20,7 @@ Flipper app that drives it ([`flipper-app/`](flipper-app/)). Prebuilt files are 
 - **2.4 GHz only.** The devboard's ESP32-S2 chip cannot see or join 5 GHz or 6 GHz networks.
 - **No enterprise sign-in.** Networks using 802.1X (a username and password, or
   certificates) are listed but cannot be joined.
-- **Up to 32 networks and 40 services** are kept per scan.
+- **Up to 32 networks and 40 services** are kept per scan, and at most 12 services of any one type.
 
 ## Install
 
@@ -70,6 +70,14 @@ The join check reports, in order: time to join and time for DHCP to answer; your
 and prefix length; the gateway and its ping time; the DNS server and whether it resolved
 a name (`example.com`); and a ping to a public address (`1.1.1.1`) as the internet test.
 
+### Reports
+
+When a discovery check finishes, the app saves a text report to the SD card as
+`apps_data/wifi_tools/report_<network>_<date>_<time>.txt`, and the screen shows "saved".
+The report holds the network name, the date and time from the Flipper's clock, the join
+check results, and every service found, grouped by type with its name, address, port and
+host name. A search stopped early with Back is not saved.
+
 ### Passwords
 
 Passwords are typed on the Flipper's keyboard and **saved in plain text** on the SD card
@@ -84,8 +92,10 @@ lacks. Delete the file to forget them. The devboard itself never stores a passwo
 |---|---|
 | Wi-Fi survey | Working on real hardware |
 | Signal walk test | Working on real hardware |
-| Join-the-network check | Not yet confirmed on hardware |
-| Discovery check | Not yet confirmed on hardware |
+| Join-the-network check | Working on real hardware |
+| Discovery check | Working on real hardware |
+| Password file edited on a computer | Working on real hardware |
+| Saved discovery reports | Not yet confirmed on hardware |
 
 ## Going back
 

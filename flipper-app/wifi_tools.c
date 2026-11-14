@@ -4,6 +4,7 @@
 // The devboard is driven with text lines over the USART (pins 13/14) at 115200 baud; see
 // esp32-firmware/src/main.cpp for the protocol.
 #include <furi.h>
+#include <stdarg.h>
 #include <furi_hal.h>
 #include <gui/gui.h>
 #include <gui/view_dispatcher.h>
@@ -22,6 +23,7 @@
 #define PASSWORD_FILE STORAGE_APP_DATA_PATH_PREFIX "/passwords.txt"
 #define PASSWORD_FILE_MAX 2048
 #define LIST_ROWS 5
+#define REPORT_SIZE 7168
 
 typedef enum { ViewMenu, ViewScreen, ViewPassword } ViewId;
 
@@ -47,8 +49,8 @@ typedef struct {
 
 typedef struct {
     char label[14];
-    char name[30];
-    char host[24];
+    char name[48];
+    char host[40];
     char ip[16];
     uint16_t port;
 } ServiceEntry;
@@ -92,6 +94,10 @@ typedef struct {
     bool mdns_done;
     uint8_t mdns_step, mdns_steps;
     char mdns_label[14];
+
+    // report file
+    bool save_request, saved, save_failed;
+    char report_name[64];
 } Model;
 
 typedef struct {
@@ -225,6 +231,7 @@ static void handle_reply(App* app, Model* m, char* text) {
             m->auto_discover = false;
             m->service_count = m->service_cursor = 0;
             m->mdns_done = false;
+            m->saved = m->save_failed = false;
             m->mdns_step = 0;
             m->screen = ScreenDiscovery;
             send_command(app, "MDNS", NULL, NULL);
@@ -242,7 +249,11 @@ static void handle_reply(App* app, Model* m, char* text) {
             copy(s->ip, sizeof(s->ip), f[4]);
             s->port = (uint16_t)atoi(f[5]);
         }
-    } else if(strcmp(cmd, "MDNS_END") == 0 || strcmp(cmd, "MDNS_FAIL") == 0) {
+    } else if(strcmp(cmd, "MDNS_END") == 0) {
+        m->mdns_done = true;
+        // a search cut short by Back is not worth keeping
+        m->save_request = m->screen == ScreenDiscovery;
+    } else if(strcmp(cmd, "MDNS_FAIL") == 0) {
         m->mdns_done = true;
     }
 }
@@ -350,6 +361,87 @@ static void password_save(const char* ssid, const char* password) {
     furi_record_close(RECORD_STORAGE);
     free(old);
     free(fresh);
+}
+
+// --- reports: SD Card/apps_data/wifi_tools/report_<network>_<date>_<time>.txt ---
+
+static size_t report_add(char* buf, size_t len, const char* fmt, ...) {
+    if(len >= REPORT_SIZE - 1) return len;
+    va_list args;
+    va_start(args, fmt);
+    int n = vsnprintf(buf + len, REPORT_SIZE - len, fmt, args);
+    va_end(args);
+    if(n < 0) return len;
+    len += (size_t)n;
+    return len >= REPORT_SIZE ? REPORT_SIZE - 1 : len;
+}
+
+static int prefix_length(const char* mask);
+
+// Builds the report text and its file name from the join and discovery results
+static size_t report_build(Model* m, char* buf) {
+    DateTime now;
+    furi_hal_rtc_get_datetime(&now);
+    char safe[24];
+    size_t k = 0;
+    for(const char* c = m->target; *c && k < sizeof(safe) - 1; c++)
+        safe[k++] = ((*c >= '0' && *c <= '9') || (*c >= 'a' && *c <= 'z') || (*c >= 'A' && *c <= 'Z')) ? *c : '_';
+    safe[k] = 0;
+    snprintf(
+        m->report_name, sizeof(m->report_name), "report_%s_%04u%02u%02u_%02u%02u%02u.txt", safe, now.year, now.month,
+        now.day, now.hour, now.minute, now.second);
+
+    size_t len = 0;
+    len = report_add(buf, len, "Wi-Fi Tools report\n");
+    len = report_add(buf, len, "Network: %s\n", m->target);
+    len = report_add(
+        buf, len, "Date: %04u-%02u-%02u %02u:%02u:%02u\n\n", now.year, now.month, now.day, now.hour, now.minute,
+        now.second);
+
+    len = report_add(buf, len, "Join check\n");
+    len = report_add(
+        buf, len, "  Joined in %lu.%lu s, DHCP answered in %lu.%lu s\n", (unsigned long)(m->assoc_ms / 1000),
+        (unsigned long)(m->assoc_ms % 1000 / 100), (unsigned long)(m->dhcp_ms / 1000),
+        (unsigned long)(m->dhcp_ms % 1000 / 100));
+    len = report_add(buf, len, "  IP address: %s/%d\n", m->ip, prefix_length(m->mask));
+    if(m->ping_gateway >= 0)
+        len = report_add(buf, len, "  Gateway: %s (ping %d ms)\n", m->gateway, m->ping_gateway);
+    else
+        len = report_add(buf, len, "  Gateway: %s (no ping reply)\n", m->gateway);
+    len = report_add(
+        buf, len, "  DNS server: %s (name lookup %s)\n", m->dns, m->dns_ok == 1 ? "worked" : "failed");
+    if(m->ping_internet >= 0)
+        len = report_add(buf, len, "  Internet: reachable (ping %d ms)\n", m->ping_internet);
+    else
+        len = report_add(buf, len, "  Internet: not reachable\n");
+    len = report_add(buf, len, "  Signal: %d dBm on channel %u\n\n", m->join_rssi, m->join_channel);
+
+    len = report_add(buf, len, "Discovery: %u service%s found\n", (unsigned)m->service_count, m->service_count == 1 ? "" : "s");
+    if(m->service_count == MAX_SERVICES) len = report_add(buf, len, "  (list is full; there may be more)\n");
+    const char* group = "";
+    for(size_t i = 0; i < m->service_count; i++) {
+        const ServiceEntry* s = &m->services[i];
+        if(strcmp(group, s->label) != 0) {
+            group = s->label;
+            len = report_add(buf, len, "\n  %s\n", group);
+        }
+        len = report_add(buf, len, "    %s\n      %s:%u  host %s\n", s->name, s->ip, s->port, s->host);
+    }
+    return len;
+}
+
+static bool report_write(const char* name, const char* buf, size_t len) {
+    Storage* storage = furi_record_open(RECORD_STORAGE);
+    FuriString* path = furi_string_alloc_printf("%s/%s", STORAGE_APP_DATA_PATH_PREFIX, name);
+    storage_common_resolve_path_and_ensure_app_directory(storage, path);
+    File* file = storage_file_alloc(storage);
+    bool ok = storage_file_open(file, furi_string_get_cstr(path), FSAM_WRITE, FSOM_CREATE_ALWAYS) &&
+              storage_file_write(file, buf, len) == len;
+    storage_file_close(file);
+    storage_file_free(file);
+    furi_string_free(path);
+    furi_record_close(RECORD_STORAGE);
+    return ok;
 }
 
 // --- actions ---
@@ -587,10 +679,12 @@ static void draw_join(Canvas* canvas, Model* m) {
 }
 
 static void draw_discovery(Canvas* canvas, Model* m) {
-    char buf[64];
+    char buf[72];
     canvas_set_font(canvas, FontSecondary);
     if(m->mdns_done)
-        snprintf(buf, sizeof(buf), "%u services found", (unsigned)m->service_count);
+        snprintf(
+            buf, sizeof(buf), "%u services found%s", (unsigned)m->service_count,
+            m->saved ? ", saved" : m->save_failed ? ", NOT saved" : "");
     else
         snprintf(buf, sizeof(buf), "Searching %u/%u: %s", m->mdns_step, m->mdns_steps, m->mdns_label);
     canvas_draw_str(canvas, 1, 8, buf);
@@ -605,7 +699,7 @@ static void draw_discovery(Canvas* canvas, Model* m) {
     size_t first = m->service_cursor >= rows ? m->service_cursor - rows + 1 : 0;
     for(size_t i = 0; i < rows && first + i < m->service_count; i++) {
         const ServiceEntry* s = &m->services[first + i];
-        snprintf(buf, sizeof(buf), "%s: %s", s->label, s->name);
+        snprintf(buf, sizeof(buf), "%s: %.40s", s->label, s->name);
         buf[27] = 0;
         draw_row(canvas, (int32_t)(19 + 9 * i), buf, first + i == m->service_cursor);
     }
@@ -710,6 +804,7 @@ static bool input_cb(InputEvent* event, void* context) {
                 if(event->key == InputKeyOk && is_short && m->join_done && m->join_state == JoinOk) {
                     m->service_count = m->service_cursor = 0;
                     m->mdns_done = false;
+                    m->saved = m->save_failed = false;
                     m->mdns_step = 0;
                     m->screen = ScreenDiscovery;
                     send_command(app, "MDNS", NULL, NULL);
@@ -750,14 +845,36 @@ static void tick_cb(void* context) {
     App* app = context;
     app->ticks++;
     bool board_ok = false;
+    char* report = NULL;
+    size_t report_len = 0;
+    char report_name[64];
     with_view_model(
         app->view,
         Model * m,
         {
             process_rx(app, m);
             board_ok = m->board_ok;
+            if(m->save_request) {
+                m->save_request = false;
+                report = malloc(REPORT_SIZE);
+                report_len = report_build(m, report);
+                strlcpy(report_name, m->report_name, sizeof(report_name));
+            }
         },
         true);
+    if(report) {
+        // the SD card write happens outside the lock so the screen keeps drawing
+        bool ok = report_write(report_name, report, report_len);
+        free(report);
+        with_view_model(
+            app->view,
+            Model * m,
+            {
+                m->saved = ok;
+                m->save_failed = !ok;
+            },
+            true);
+    }
     // keep asking until the devboard answers (it may still be booting)
     if(!board_ok && app->ticks % 20 == 1) send_command(app, "VER", NULL, NULL);
 }
