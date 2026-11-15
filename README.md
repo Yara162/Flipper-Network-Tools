@@ -10,6 +10,10 @@ devices depend on, without getting a laptop out.
 | Signal walk test | Live signal strength of one network as you walk the room, with minimum, maximum and average |
 | Join-the-network check | Whether you can join, how long it took, the address DHCP gave you, and whether the gateway, DNS and internet answer |
 | Discovery check | Which AirPlay, Chromecast, Dante, NDI and similar services are visible on that network |
+| Device finder | Every device on the subnet with its address, hardware address and maker, plus a check of common control ports on any one of them |
+| Stability logger | Ping time, jitter, packet loss, roams and link drops over as long as you leave it running, saved as a log |
+| Control client | Sends PJLink, TCP, UDP, HTTP and Wake-on-LAN commands from a list you keep on the SD card |
+| Clock sync | Sets the Flipper's clock from a network time server |
 
 It has two parts: firmware for the devboard ([`esp32-firmware/`](esp32-firmware/)) and a
 Flipper app that drives it ([`flipper-app/`](flipper-app/)). Prebuilt files are in
@@ -20,7 +24,9 @@ Flipper app that drives it ([`flipper-app/`](flipper-app/)). Prebuilt files are 
 - **2.4 GHz only.** The devboard's ESP32-S2 chip cannot see or join 5 GHz or 6 GHz networks.
 - **No enterprise sign-in.** Networks using 802.1X (a username and password, or
   certificates) are listed but cannot be joined.
-- **Up to 32 networks and 40 services** are kept per scan, and at most 12 services of any one type.
+- **Up to 32 networks, 40 services and 96 devices** are kept per scan, and at most 12 services of any one type.
+- **The device finder sweeps at most 254 addresses.** On a larger subnet it covers the /24 around the Flipper's own address and says so.
+- **Use the device finder and port check only on networks you look after** or have permission to examine.
 
 ## Install
 
@@ -53,15 +59,25 @@ Flipper firmware 1.5.1 (API 88.2); rebuild it with
 
 ## Use
 
-Open Apps → GPIO → Wi-Fi Tools. Each menu entry starts with a scan and a list of networks,
-strongest first: channel, signal in dBm, a `*` for secured networks, and the name.
+Open Apps → GPIO → Wi-Fi Tools. The first three tools work on any network in range. The
+rest need a joined network: pick one from the list and enter its password, and the tool
+starts once the join succeeds.
+
+**The network stays joined** when you press Back to the menu, and the menu title shows
+`On: <network>`. Every tool that needs a network then uses that one straight away. To
+change network, run "Join-the-network check" on another one, or choose "Leave network".
+A walk test also leaves the joined network.
 
 | Screen | Controls |
 |---|---|
-| Network list | Up/Down move, Left scans again, Right shows the channel chart. From "Wi-Fi survey", OK starts a walk test on the selected network and holding OK starts a join check. From the other menu entries, OK chooses the network. |
+| Network list | Up/Down move, Left scans again, Right shows the channel chart. From "Wi-Fi survey", OK starts a walk test on the selected network and holding OK joins it. From the other menu entries, OK chooses the network. |
 | Walk test | OK resets the minimum, maximum and average. Back stops. |
-| Join check | When it finishes, OK runs discovery. Back leaves the network. |
+| Join check | Back returns to the menu and stays joined. |
 | Discovery | Up/Down move through the services; the bottom lines show the selected one's address, port and host name. |
+| Device finder | Up/Down move; the bottom lines show the selected device's address and hardware address. OK checks its control ports. |
+| Stability logger | Runs until you press Back, which saves the log. |
+| Control client | Up/Down choose a command, OK sends it. On the result screen, OK sends it again. |
+| Clock sync | Left/Right change the time zone, OK sets the Flipper's clock. |
 
 Signal quality on the walk test: Excellent is -55 dBm or better, Good to -67, Fair to -75,
 Weak to -82, Poor below that.
@@ -70,10 +86,66 @@ The join check reports, in order: time to join and time for DHCP to answer; your
 and prefix length; the gateway and its ping time; the DNS server and whether it resolved
 a name (`example.com`); and a ping to a public address (`1.1.1.1`) as the internet test.
 
+### Device finder
+
+The sweep asks every address on the subnet to identify itself (an ARP request), which
+finds devices even when they ignore ping. It takes about 15 seconds for a /24. Each device
+is listed by the last part of its address and its maker, looked up from the hardware
+address. Phones and laptops that randomise their hardware address show as "Private
+address".
+
+OK on a device tries to connect to a short list of control ports and names the ones that
+are open: SSH, Telnet, web, RTSP, AMX, Samsung MDC, Q-SYS control, PJLink, Global Caché,
+AirPlay, NEC, Chromecast, printer, LG, Sharp and Sony display control, and Crestron.
+
+The device list is saved as `devices_<network>_<date>_<time>.txt`; port checks you make
+afterwards are added to the same file.
+
+### Stability logger
+
+Pings the gateway once a second and charts the last two minutes: one column per ping,
+taller for slower replies (60 ms or more fills the chart), dotted for a lost ping and
+solid for a second spent offline. Below the chart are the latest, average and maximum
+ping times, pings lost, jitter (the average change from one ping to the next), roams
+between access points and link drops. If the link drops, the devboard rejoins by itself
+and logging continues.
+
+Back stops it and saves `stability_<network>_<date>_<time>.txt` with the totals and a
+timed list of events: each roam, each run of lost pings and each link drop with its length.
+
+### Control client
+
+Commands live in `apps_data/wifi_tools/commands.txt` on the SD card, one per line as
+`Name = type details`. The app creates the file with commented examples the first time
+you open the control client.
+
+| Type | Details | Example |
+|---|---|---|
+| `pjlink` | address, optional `password=...`, then the command | `Projector on = pjlink 192.168.1.50 POWR 1` |
+| `tcp` | address:port, then the text to send | `DSP mute = tcp 192.168.1.70:23 DEVICE set mute 1\r\n` |
+| `udp` | address:port, then the text to send | `Trigger = udp 192.168.1.90:5000 GO\r` |
+| `http` | `GET` or `POST`, a URL, and for POST a body | `Preset 1 = http GET http://192.168.1.80/api/preset/1` |
+| `wol` | a hardware (MAC) address | `Wake rack PC = wol AA:BB:CC:DD:EE:FF` |
+
+In `tcp`, `udp` and POST text, `\r`, `\n`, `\t` and `\xNN` stand for the matching bytes,
+so binary protocols such as Samsung MDC can be written as `\xAA\x11\x01...`. The result
+screen shows OK or FAILED and the first part of the device's reply. Up to 24 commands are
+read. `https://` URLs are accepted without checking the device's certificate, since AV
+devices nearly always use self-signed ones.
+
+### Clock sync
+
+Asks `pool.ntp.org`, then `time.google.com`, then the network's own gateway for the time.
+Network time carries no time zone, so the app works one out from how far the Flipper's
+clock already is from it, to the nearest quarter hour, and shows it for you to check and
+adjust with Left/Right before OK sets the clock. If the Flipper's clock was far off, the
+zone is shown with a `?` and starts at UTC.
+
 ### Reports
 
-When a discovery check finishes, the app saves a text report to the SD card as
-`apps_data/wifi_tools/report_<network>_<date>_<time>.txt`, and the screen shows "saved".
+All reports go to `apps_data/wifi_tools/` on the SD card. The device finder and stability
+logger are described above. When a discovery check finishes, the app saves
+`report_<network>_<date>_<time>.txt`, and the screen shows "saved".
 The report holds the network name, the date and time from the Flipper's clock, the join
 check results, and every service found, grouped by type with its name, address, port and
 host name. A search stopped early with Back is not saved.
@@ -88,8 +160,7 @@ lacks. Delete the file to forget them. The devboard itself never stores a passwo
 
 ## Status
 
-Every feature has been tested on real hardware (Flipper Zero on firmware 1.5.1 with the
-official Wi-Fi Devboard).
+Tested on a Flipper Zero with firmware 1.5.1 and the official Wi-Fi Devboard.
 
 | Item | Status |
 |---|---|
@@ -99,10 +170,16 @@ official Wi-Fi Devboard).
 | Discovery check | Working on real hardware |
 | Password file edited on a computer | Working on real hardware |
 | Saved discovery reports | Working on real hardware |
+| Staying joined between tools, "Leave network" | Not yet run on hardware |
+| Device finder and port check | Not yet run on hardware (maker lookup tested on a PC) |
+| Stability logger | Not yet run on hardware |
+| Control client | Not yet run on hardware |
+| Clock sync | Not yet run on hardware |
 
 Discovery was confirmed with AirPlay, Chromecast, HomeKit and SSH services. The test
 network had no Dante or NDI devices, so those two service types have not been seen in
-practice.
+practice. The first six rows were tested with firmware version 1; version 2 restructures
+how the app moves between tools, so they are worth a quick re-check.
 
 ## Going back
 
@@ -121,6 +198,13 @@ cd esp32-firmware
 pio run
 ```
 
+The maker table (`esp32-firmware/src/oui_table.h`) is generated from Wireshark's
+manufacturer database:
+
+```bash
+python3 tools/make_oui.py manuf esp32-firmware/src/oui_table.h
+```
+
 Flipper app:
 
 ```bash
@@ -136,6 +220,11 @@ ufbt
 The Flipper sends one text command per line over its UART (pins 13 and 14) at 115200 baud;
 the devboard answers with lines starting with `$`. The protocol is described at the top of
 [`esp32-firmware/src/main.cpp`](esp32-firmware/src/main.cpp).
+
+## Credits
+
+Maker names come from the [Wireshark manufacturer database](https://www.wireshark.org/download/automated/data/manuf),
+which is compiled from the IEEE's public registries.
 
 ## Licence
 
