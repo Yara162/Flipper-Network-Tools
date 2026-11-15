@@ -170,16 +170,16 @@ Tested on a Flipper Zero with firmware 1.5.1 and the official Wi-Fi Devboard.
 | Discovery check | Working on real hardware |
 | Password file edited on a computer | Working on real hardware |
 | Saved discovery reports | Working on real hardware |
-| Staying joined between tools, "Leave network" | Not yet run on hardware |
-| Device finder and port check | Not yet run on hardware (maker lookup tested on a PC) |
-| Stability logger | Not yet run on hardware |
-| Control client | Not yet run on hardware |
-| Clock sync | Not yet run on hardware |
+| Staying joined between tools | Working on real hardware |
+| Device finder | Working on real hardware |
+| Stability logger | Working on real hardware |
+| Clock sync | Working on real hardware |
+| Control-port check on a found device | Not yet confirmed on hardware |
+| Control client | Not yet confirmed on hardware |
 
 Discovery was confirmed with AirPlay, Chromecast, HomeKit and SSH services. The test
 network had no Dante or NDI devices, so those two service types have not been seen in
-practice. The first six rows were tested with firmware version 1; version 2 restructures
-how the app moves between tools, so they are worth a quick re-check.
+practice.
 
 ## Going back
 
