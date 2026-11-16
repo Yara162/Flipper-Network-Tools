@@ -2,3 +2,5 @@ esp32-firmware/.pio/
 flipper-app/dist/
 flipper-app/.vscode/
 .vscode/
+lan-app/dist/
+lan-app/.vscode/

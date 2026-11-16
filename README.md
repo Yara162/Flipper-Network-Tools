@@ -1,4 +1,4 @@
-# Flipper Wi-Fi Tools
+# Flipper Network Tools
 
 A Wi-Fi utility for the Flipper Zero and its official Wi-Fi Devboard, made for AV
 commissioning: check the wireless that presentation systems, touch panels and streaming
@@ -15,9 +15,11 @@ devices depend on, without getting a laptop out.
 | Control client | Sends PJLink, TCP, UDP, HTTP and Wake-on-LAN commands from a list you keep on the SD card |
 | Clock sync | Sets the Flipper's clock from a network time server |
 
-It has two parts: firmware for the devboard ([`esp32-firmware/`](esp32-firmware/)) and a
-Flipper app that drives it ([`flipper-app/`](flipper-app/)). Prebuilt files are in
-[`bin/`](bin/).
+The Wi-Fi tools have two parts: firmware for the devboard
+([`esp32-firmware/`](esp32-firmware/)) and a Flipper app that drives it
+([`flipper-app/`](flipper-app/)). A wired version for a W5500 Ethernet module is being
+built in [`lan-app/`](lan-app/); see [LAN Tools](#lan-tools-wired) below. Prebuilt files
+are in [`bin/`](bin/).
 
 ## Limits
 
@@ -181,6 +183,52 @@ Discovery was confirmed with AirPlay, Chromecast, HomeKit and SSH services. The 
 network had no Dante or NDI devices, so those two service types have not been seen in
 practice.
 
+## LAN Tools (wired)
+
+A second app, LAN Tools, brings the same checks to wired networks using a W5500 Ethernet
+module wired straight to the Flipper. No devboard is involved: the Flipper runs the
+networking itself.
+
+**First version:** link state (speed and duplex) and the join-the-network check: DHCP,
+gateway ping, DNS lookup and internet ping, with a saved report. The other tools
+(discovery, device finder, stability logger, control client, clock sync) are still to
+come, along with a wired-only one: reading the switch's name, port and VLAN.
+
+### Wiring
+
+| W5500 module pin | Flipper pin |
+|---|---|
+| 3.3V | 9 (3V3) |
+| GND | 8 (GND) |
+| MOSI | 2 (A7) |
+| MISO | 3 (A6) |
+| SCLK | 5 (B3) |
+| SCS | 4 (A4) |
+| RST, INT, 5V | leave unconnected |
+
+Power the module from the 3.3 V pin only; do not also connect its 5 V pin.
+
+### Use
+
+Copy `bin/lan_tools.fap` to `SD Card/apps/GPIO/` and open LAN Tools. The app shows the
+wiring until it finds the module, then the link state. Plug in a network cable and press
+OK to run the check. The report is saved to
+`SD Card/apps_data/lan_tools/lan_<date>_<time>.txt`.
+
+The DHCP time shown includes about half a second the DHCP client spends checking that
+nobody else already uses the address it was given.
+
+### Status
+
+Compiles for Flipper firmware 1.5.1. Not yet run on hardware.
+
+### How it is built
+
+DHCP and DNS use WIZnet's [ioLibrary](https://github.com/Wiznet/ioLibrary_Driver) (MIT
+licence, a copy of the needed files is in `lan-app/lib/ioLibrary/`). The W5500's built-in
+networking cannot send pings, so ping and the address lookup it needs are built from raw
+Ethernet frames in `lan-app/net.c`.
+
 ## Going back
 
 To restore the devboard's original firmware, follow Flipper's
@@ -205,7 +253,7 @@ manufacturer database:
 python3 tools/make_oui.py manuf esp32-firmware/src/oui_table.h
 ```
 
-Flipper app:
+Flipper apps (the same command in `flipper-app/` or `lan-app/`):
 
 ```bash
 cd flipper-app

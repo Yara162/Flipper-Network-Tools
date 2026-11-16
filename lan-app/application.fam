@@ -1,0 +1,27 @@
+App(
+    appid="lan_tools",
+    name="LAN Tools",
+    apptype=FlipperAppType.EXTERNAL,
+    entry_point="lan_tools_app",
+    requires=["gui", "storage"],
+    stack_size=4 * 1024,
+    fap_category="GPIO",
+    fap_version="0.1",
+    fap_description="Wired network checks with a W5500 Ethernet module",
+    cdefines=["_WIZCHIP_=W5500"],
+    fap_private_libs=[
+        Lib(
+            name="ioLibrary",
+            fap_include_paths=["Ethernet", "Ethernet/W5500", "Internet/DHCP", "Internet/DNS"],
+            sources=[
+                "Ethernet/socket.c",
+                "Ethernet/wizchip_conf.c",
+                "Ethernet/W5500/w5500.c",
+                "Internet/DHCP/dhcp.c",
+                "Internet/DNS/dns.c",
+            ],
+            cdefines=["_WIZCHIP_=W5500"],
+            cflags=["-Wno-error"],
+        ),
+    ],
+)
