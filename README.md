@@ -220,7 +220,9 @@ nobody else already uses the address it was given.
 
 ### Status
 
-Compiles for Flipper firmware 1.5.1. Not yet run on hardware.
+Working on real hardware (Flipper Zero on firmware 1.5.1 with a W5500 module): wiring,
+module detection, link speed and duplex, DHCP, gateway ping, DNS lookup, internet ping
+and the saved report.
 
 ### How it is built
 
