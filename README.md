@@ -1,5 +1,7 @@
 # Flipper Network Tools
 
+[![flipper-ci](https://github.com/Yara162/flipper-network-tools/actions/workflows/flipper-ci.yml/badge.svg)](https://github.com/Yara162/flipper-network-tools/actions/workflows/flipper-ci.yml)
+
 A Wi-Fi utility for the Flipper Zero and its official Wi-Fi Devboard, made for AV
 commissioning: check the wireless that presentation systems, touch panels and streaming
 devices depend on, without getting a laptop out.
